@@ -476,29 +476,18 @@ export function CalendarView({ user, onClose }: Props) {
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-[#080808] overflow-y-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-900 sticky top-0 bg-[#080808] z-10"
-        style={{ borderBottomColor: `${accent}22` }}>
-        <button onClick={onClose}
-          className="font-mono text-xs text-zinc-600 hover:text-zinc-300 transition-colors flex items-center gap-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
-            <path d="M19 12H5M12 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Înapoi
-        </button>
-        <span className="font-display font-black text-xl" style={{ letterSpacing: '-0.03em' }}>CALENDAR</span>
-        <div className="flex gap-1 bg-zinc-900 rounded-lg p-1">
-          {([['month', 'LUNĂ'], ['export', 'EXPORT']] as const).map(([m, label]) => (
-            <button key={m} onClick={() => setMode(m)}
-              className="font-mono text-[10px] px-2.5 py-1 rounded-md transition-all"
-              style={{ backgroundColor: mode === m ? accent : 'transparent', color: mode === m ? '#080808' : '#555' }}>
-              {label}
-            </button>
-          ))}
+      {/* Minimal top title — no actions here */}
+      <div className="px-4 pt-5 pb-1">
+        <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-zinc-700">
+          {user.toUpperCase()}
+        </span>
+        <div className="font-display font-black text-3xl leading-none" style={{ letterSpacing: '-0.04em' }}>
+          CALENDAR
         </div>
       </div>
 
-      <div className="px-4 pt-5 pb-10">
+      {/* Scrollable content — extra bottom padding for the fixed action bar */}
+      <div className="px-4 pt-4" style={{ paddingBottom: 'calc(80px + env(safe-area-inset-bottom))' }}>
 
         {/* ── MONTH VIEW ── */}
         {mode === 'month' && (
@@ -600,6 +589,49 @@ export function CalendarView({ user, onClose }: Props) {
             </p>
           </div>
         )}
+      </div>
+
+      {/* ── Fixed bottom action bar ── */}
+      <div
+        className="fixed bottom-0 left-0 right-0 z-20 flex items-center justify-between px-4 bg-[#080808] border-t border-zinc-900"
+        style={{
+          borderTopColor: `${accent}22`,
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          minHeight: '64px',
+        }}
+      >
+        {/* Back button — large tap target for thumb */}
+        <button
+          onClick={onClose}
+          className="flex items-center gap-2 rounded-xl border border-zinc-800 hover:border-zinc-600 transition-colors"
+          style={{ height: '48px', paddingLeft: '16px', paddingRight: '20px' }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4 text-zinc-400">
+            <path d="M19 12H5M12 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span className="font-mono text-sm text-zinc-400">Înapoi</span>
+        </button>
+
+        {/* Mode switcher */}
+        <div className="flex gap-1 bg-zinc-900 rounded-xl p-1">
+          {([['month', 'LUNĂ'], ['export', 'EXPORT']] as const).map(([m, label]) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className="font-mono text-xs rounded-lg transition-all"
+              style={{
+                height: '38px',
+                paddingLeft: '16px',
+                paddingRight: '16px',
+                backgroundColor: mode === m ? accent : 'transparent',
+                color: mode === m ? '#080808' : '#666',
+                fontWeight: mode === m ? 700 : 400,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Popups */}
