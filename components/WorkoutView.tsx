@@ -8,6 +8,7 @@ import {
   getCustomExercises, saveCustomExercises,
   getDeletedIds, saveDeletedIds,
   saveHistory,
+  getWorkoutLog, saveWorkoutLog,
 } from '@/lib/storage'
 import { CalendarView } from './CalendarView'
 import { AddExerciseModal } from './AddExerciseModal'
@@ -60,6 +61,7 @@ export function WorkoutView({ user, onLogout }: Props) {
   const [actionTarget, setActionTarget] = useState<string | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
+  const [saved,        setSaved]        = useState(false)
 
   const exercisesRef = useRef(exercises)
   exercisesRef.current = exercises
@@ -74,6 +76,7 @@ export function WorkoutView({ user, onLogout }: Props) {
 
     const savedIds = getChecked(user, today)
     setChecked(new Set(savedIds.filter(id => list.some(e => e.id === id))))
+    setSaved(!!getWorkoutLog(user, today))
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Long-press via Pointer Events (works identically on touch + mouse) ───
@@ -159,6 +162,24 @@ export function WorkoutView({ user, onLogout }: Props) {
     setExercises(newList)
     saveHistory(user, today, checked.size, newList.length)
     setShowAddModal(false)
+  }
+
+  // ─── Save workout log ──────────────────────────────────────────────────────
+  const handleSave = () => {
+    if (saved) return
+    saveWorkoutLog(user, today, {
+      date: today,
+      title: workout?.title ?? 'Antrenament',
+      exercises: exercises.map(ex => ({
+        name:      ex.name,
+        muscle:    ex.muscle,
+        sets:      ex.sets,
+        reps:      ex.reps,
+        completed: checked.has(ex.id),
+      })),
+      savedAt: new Date().toISOString(),
+    })
+    setSaved(true)
   }
 
   // ─── Derived ───────────────────────────────────────────────────────────────
@@ -329,15 +350,24 @@ export function WorkoutView({ user, onLogout }: Props) {
           </div>
 
           {allDone && (
-            <div
-              className="mx-4 mb-10 p-5 rounded-2xl text-center border animate-fadeIn"
-              style={{ borderColor: `${accent}44`, backgroundColor: `${accent}0d` }}
+            <button
+              onClick={handleSave}
+              disabled={saved}
+              className="mx-4 mb-10 p-5 rounded-2xl text-center border w-[calc(100%-2rem)] animate-fadeIn transition-all duration-300"
+              style={{
+                borderColor: saved ? `${accent}66` : accent,
+                backgroundColor: saved ? `${accent}18` : `${accent}0d`,
+              }}
             >
               <div className="font-display font-black text-3xl leading-none mb-1" style={{ color: accent }}>
-                ANTRENAMENT COMPLET
+                {saved ? 'SALVAT ✓' : 'ANTRENAMENT COMPLET'}
               </div>
-              <div className="font-mono text-xs text-zinc-500 mt-2">Bine ai muncit, {user}. 💪</div>
-            </div>
+              <div className="font-mono text-xs mt-2" style={{ color: saved ? accent : '#666' }}>
+                {saved
+                  ? `Bine ai muncit, ${user}! Ziua e salvată în calendar.`
+                  : 'Apasă pentru a salva în calendar'}
+              </div>
+            </button>
           )}
         </>
       ) : (

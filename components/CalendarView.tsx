@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { getHistory } from '@/lib/storage'
+import { getHistory, generateExportText } from '@/lib/storage'
 import { USER_ACCENT, type UserId } from '@/data/workouts'
 
 const DAY_LABELS  = ['L', 'Ma', 'Mi', 'J', 'V', 'S', 'D']
@@ -38,7 +38,7 @@ export function CalendarView({ user, onClose }: Props) {
   const accent  = USER_ACCENT[user]
   const today   = dateStr(new Date())
 
-  const [mode, setMode]  = useState<'week' | 'month'>('week')
+  const [mode, setMode]  = useState<'week' | 'month' | 'export'>('week')
 
   // Week navigation: store the Monday of the displayed week
   const [weekMon, setWeekMon] = useState(() => mondayOf(new Date()))
@@ -46,6 +46,29 @@ export function CalendarView({ user, onClose }: Props) {
   // Month navigation
   const [viewYear,  setViewYear]  = useState(new Date().getFullYear())
   const [viewMonth, setViewMonth] = useState(new Date().getMonth())
+
+  // Export
+  const [exportDays, setExportDays] = useState<7 | 14 | 21>(7)
+  const [copied,     setCopied]     = useState(false)
+  const exportText = useMemo(
+    () => mode === 'export' ? generateExportText(user, exportDays, user) : '',
+    [user, exportDays, mode],
+  )
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(exportText)
+    } catch {
+      const el = document.createElement('textarea')
+      el.value = exportText
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      document.body.removeChild(el)
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const history = useMemo(() => getHistory(user), [user])
 
@@ -156,7 +179,7 @@ export function CalendarView({ user, onClose }: Props) {
 
         {/* Mode toggle */}
         <div className="flex gap-1 bg-zinc-900 rounded-lg p-1">
-          {(['week', 'month'] as const).map(m => (
+          {([['week','SĂP'], ['month','LUNĂ'], ['export','EXPORT']] as const).map(([m, label]) => (
             <button
               key={m}
               onClick={() => setMode(m)}
@@ -166,7 +189,7 @@ export function CalendarView({ user, onClose }: Props) {
                 color: mode === m ? '#080808' : '#555',
               }}
             >
-              {m === 'week' ? 'SĂP' : 'LUNĂ'}
+              {label}
             </button>
           ))}
         </div>
@@ -268,23 +291,75 @@ export function CalendarView({ user, onClose }: Props) {
           </>
         )}
 
-        {/* Legend */}
-        <div className="mt-6 pt-4 border-t border-zinc-900 space-y-2.5">
-          <div className="font-mono text-[10px] text-zinc-700 uppercase tracking-widest mb-3">Legendă</div>
-          {[
-            { bg: accent, label: 'Antrenament complet' },
-            { bg: `${accent}55`, label: 'Antrenament parțial' },
-            { border: accent, label: 'Astăzi' },
-          ].map(({ bg, border, label }) => (
-            <div key={label} className="flex items-center gap-3">
-              <div
-                className="w-6 h-6 rounded-full shrink-0"
-                style={{ backgroundColor: bg, border: border ? `2px solid ${border}` : undefined }}
-              />
-              <span className="font-mono text-xs text-zinc-500">{label}</span>
+        {/* Legend — shown only on calendar modes */}
+        {mode !== 'export' && (
+          <div className="mt-6 pt-4 border-t border-zinc-900 space-y-2.5">
+            <div className="font-mono text-[10px] text-zinc-700 uppercase tracking-widest mb-3">Legendă</div>
+            {[
+              { bg: accent, label: 'Antrenament complet' },
+              { bg: `${accent}55`, label: 'Antrenament parțial' },
+              { border: accent, label: 'Astăzi' },
+            ].map(({ bg, border, label }) => (
+              <div key={label} className="flex items-center gap-3">
+                <div
+                  className="w-6 h-6 rounded-full shrink-0"
+                  style={{ backgroundColor: bg, border: border ? `2px solid ${border}` : undefined }}
+                />
+                <span className="font-mono text-xs text-zinc-500">{label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── EXPORT MODE ── */}
+        {mode === 'export' && (
+          <div className="mt-2">
+            {/* Range selector */}
+            <div className="flex gap-2 mb-4">
+              {([7, 14, 21] as const).map(d => (
+                <button
+                  key={d}
+                  onClick={() => setExportDays(d)}
+                  className="flex-1 py-2.5 rounded-xl font-mono text-xs font-bold transition-all border"
+                  style={{
+                    backgroundColor: exportDays === d ? accent : 'transparent',
+                    color: exportDays === d ? '#080808' : '#555',
+                    borderColor: exportDays === d ? accent : '#222',
+                  }}
+                >
+                  {d} zile
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
+
+            {/* Copy button */}
+            <button
+              onClick={handleCopy}
+              className="w-full py-3 rounded-xl font-display font-black text-lg mb-4 transition-all"
+              style={{
+                backgroundColor: copied ? `${accent}33` : accent,
+                color: copied ? accent : '#080808',
+                border: copied ? `1px solid ${accent}` : 'none',
+              }}
+            >
+              {copied ? 'COPIAT ✓' : 'COPIAZĂ TEXT'}
+            </button>
+
+            {/* Text preview */}
+            <div
+              className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 overflow-auto"
+              style={{ maxHeight: '55vh' }}
+            >
+              <pre className="font-mono text-[11px] text-zinc-400 whitespace-pre-wrap leading-relaxed">
+                {exportText}
+              </pre>
+            </div>
+
+            <p className="font-mono text-[10px] text-zinc-700 text-center mt-3 leading-relaxed">
+              Copiază textul și dă-l paste unui AI pentru a genera<br />un program nou bazat pe antrenamentele tale.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )
