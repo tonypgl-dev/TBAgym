@@ -6,6 +6,8 @@ import {
   getDayExercises, generateExportText,
   getCustomExercises, saveCustomExercises,
   getDayNote, saveDayNote, deleteDayNote,
+  getDayType, saveDayType,
+  type DayType,
 } from '@/lib/storage'
 import { getWorkoutForDate, USER_ACCENT, type UserId } from '@/data/workouts'
 import type { Exercise } from '@/data/workouts'
@@ -58,6 +60,7 @@ export function CalendarView({ user, onClose }: Props) {
   // Plan-day state
   const [plannedExs,    setPlannedExs]    = useState<Exercise[]>([])
   const [showAddForPlan, setShowAddForPlan] = useState(false)
+  const [dayType,       setDayType]       = useState<DayType>('hard')
 
   // Rest-note state
   const [noteTitle, setNoteTitle] = useState('')
@@ -96,12 +99,27 @@ export function CalendarView({ user, onClose }: Props) {
     setNotedDates(noted)
   }
 
+  // Auto-detect opposite day type from last known gym day before targetDate
+  function detectDayType(targetDate: string): DayType {
+    const sortedPastGymDays = Object.keys(history)
+      .filter(d => d < targetDate && (history[d]?.done ?? 0) > 0)
+      .sort()
+      .reverse()
+    for (const d of sortedPastGymDays) {
+      const t = getDayType(user, d)
+      if (t) return t === 'easy' ? 'hard' : 'easy'
+    }
+    return 'hard'
+  }
+
   // ─── Load popup-specific state when popup opens ───────────────────────────
   useEffect(() => {
     if (!popup) return
     if (popup.type === 'plan') {
       setPlannedExs(getCustomExercises(user, popup.date))
       setShowAddForPlan(false)
+      const existing = getDayType(user, popup.date)
+      setDayType(existing ?? detectDayType(popup.date))
     }
     if (popup.type === 'note') {
       const existing = getDayNote(user, popup.date)
@@ -109,7 +127,7 @@ export function CalendarView({ user, onClose }: Props) {
       setNoteText(existing?.note ?? '')
       setNoteSaved(false)
     }
-  }, [popup, user])
+  }, [popup, user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Export text
   useEffect(() => {
@@ -135,6 +153,11 @@ export function CalendarView({ user, onClose }: Props) {
   ).length
 
   // ─── Plan day handlers ────────────────────────────────────────────────────
+  const handleDayTypeChange = async (type: DayType) => {
+    setDayType(type)
+    if (popup?.type === 'plan') await saveDayType(user, popup.date, type)
+  }
+
   const handleAddPlanned = async (ex: Exercise) => {
     if (!popup || popup.type !== 'plan') return
     const next = [...plannedExs, ex]
@@ -269,10 +292,38 @@ export function CalendarView({ user, onClose }: Props) {
     return (
       <BottomSheet onClose={() => setPopup(null)}>
         <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-600">{dayLabel(popup.date)}</div>
-        <div className="font-display font-black text-2xl leading-tight mb-1" style={{ color: accent }}>
+        <div className="font-display font-black text-2xl leading-tight mb-4" style={{ color: accent }}>
           PLANIFICĂ ZIUA
         </div>
-        <div className="font-mono text-[10px] text-zinc-600 mb-5">
+
+        {/* Day type toggle */}
+        <div className="mb-5">
+          <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-600 mb-2">Tipul zilei</div>
+          <div className="flex gap-2">
+            {([
+              { val: 'hard' as DayType, label: '⚡ ZIUA GREA',   desc: 'Greutăți mari, volum mic' },
+              { val: 'easy' as DayType, label: '🌿 ZIUA UȘOARĂ', desc: 'Greutăți mici, execuție lentă' },
+            ]).map(({ val, label, desc }) => (
+              <button
+                key={val}
+                onClick={() => handleDayTypeChange(val)}
+                className="flex-1 py-3 px-2 rounded-xl border transition-all duration-200 text-left"
+                style={{
+                  backgroundColor: dayType === val ? `${accent}18` : 'transparent',
+                  borderColor:     dayType === val ? accent : '#333',
+                }}
+              >
+                <div className="font-mono text-xs font-bold mb-0.5"
+                  style={{ color: dayType === val ? accent : '#555' }}>
+                  {label}
+                </div>
+                <div className="font-mono text-[9px] text-zinc-700 leading-tight">{desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="font-mono text-[10px] text-zinc-600 mb-3">
           Exercițiile adăugate vor apărea automat în ziua respectivă.
         </div>
 

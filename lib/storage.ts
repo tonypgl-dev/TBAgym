@@ -9,6 +9,7 @@ const LS_CUSTOM   = (u: string, d: string) => `gbuddy_custom_${u}_${d}`
 const LS_DELETED  = (u: string, d: string) => `gbuddy_deleted_${u}_${d}`
 const LS_LOG      = (u: string, d: string) => `gbuddy_log_${u}_${d}`
 const LS_NOTE     = (u: string, d: string) => `gbuddy_note_${u}_${d}`
+const LS_DAYTYPE  = (u: string, d: string) => `gbuddy_daytype_${u}_${d}`
 
 function lsRead<T>(key: string, fallback: T): T {
   try { return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback }
@@ -169,7 +170,7 @@ export async function syncUserData(userId: string) {
   // Sync daily states
   const { data: states } = await supabase
     .from('daily_state')
-    .select('date, checked_ids, custom_exercises, deleted_ids')
+    .select('date, checked_ids, custom_exercises, deleted_ids, day_type')
     .eq('user_id', userId)
 
   if (states) {
@@ -177,6 +178,7 @@ export async function syncUserData(userId: string) {
       lsWrite(LS_CHECKED(userId, s.date), s.checked_ids ?? [])
       lsWrite(LS_CUSTOM(userId, s.date), s.custom_exercises ?? [])
       lsWrite(LS_DELETED(userId, s.date), s.deleted_ids ?? [])
+      if (s.day_type) lsWrite(LS_DAYTYPE(userId, s.date), s.day_type)
     }
   }
 
@@ -242,6 +244,22 @@ export function getDayExercises(userId: string, date: string): DayExercise[] {
   }))
 }
 
+// ─── Day type (Grea / Ușoară) ────────────────────────────────────────────────
+export type DayType = 'hard' | 'easy'
+
+export function getDayType(userId: string, date: string): DayType | null {
+  return lsRead(LS_DAYTYPE(userId, date), null)
+}
+
+export async function saveDayType(userId: string, date: string, type: DayType) {
+  lsWrite(LS_DAYTYPE(userId, date), type)
+  // Upsert only day_type — other columns keep their existing values on conflict
+  await supabase
+    .from('daily_state')
+    .upsert({ user_id: userId, date, day_type: type, updated_at: new Date().toISOString() },
+             { onConflict: 'user_id,date' })
+}
+
 // ─── Rest-day notes ───────────────────────────────────────────────────────────
 export interface DayNote { title: string; note: string }
 
@@ -304,7 +322,13 @@ const RO_MONTHS = ['Ianuarie','Februarie','Martie','Aprilie','Mai','Iunie',
 export function generateExportText(userId: string, days: number, userName: string): string {
   const lines: string[] = []
   const now   = new Date()
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
   let gymDays = 0
+
+  const typeLabel = (ds: string) => {
+    const t = getDayType(userId, ds)
+    return t === 'hard' ? ' · Ziua Grea' : t === 'easy' ? ' · Ziua Ușoară' : ''
+  }
 
   lines.push(`PROGRAM ${userName.toUpperCase()} — ULTIMELE ${days} ZILE`)
   lines.push('='.repeat(44))
@@ -333,7 +357,7 @@ export function generateExportText(userId: string, days: number, userName: strin
     }
 
     const title = workout?.title ?? (completed.length > 0 ? 'Antrenament' : 'Odihnă')
-    lines.push(`${dayLabel} — ${title}`)
+    lines.push(`${dayLabel} — ${title}${typeLabel(ds)}`)
 
     if (exercises.length > 0) {
       exercises.forEach(ex => {
@@ -347,5 +371,30 @@ export function generateExportText(userId: string, days: number, userName: strin
   }
 
   lines.push(`Total: ${gymDays} din ${days} zile de sală`)
+
+  // Planned future days (next 21 days)
+  const plannedLines: string[] = []
+  for (let i = 1; i <= 21; i++) {
+    const d  = new Date(now)
+    d.setDate(now.getDate() + i)
+    const ds       = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    const dayLabel = `${RO_DAYS[d.getDay()]} ${d.getDate()} ${RO_MONTHS[d.getMonth()]} ${d.getFullYear()}`
+    const customExs = getCustomExercises(userId, ds)
+    const type      = getDayType(userId, ds)
+    if (customExs.length === 0 && !type) continue
+    const tl = type === 'hard' ? ' · Ziua Grea' : type === 'easy' ? ' · Ziua Ușoară' : ''
+    plannedLines.push(`${dayLabel} — Planificat${tl}`)
+    customExs.forEach(ex => plannedLines.push(`  + ${ex.name}: ${ex.sets} serii x ${ex.reps}`))
+    plannedLines.push('')
+  }
+
+  if (plannedLines.length > 0) {
+    lines.push('')
+    lines.push('ZILE PLANIFICATE')
+    lines.push('-'.repeat(44))
+    lines.push('')
+    lines.push(...plannedLines)
+  }
+
   return lines.join('\n')
 }
