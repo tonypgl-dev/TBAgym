@@ -28,6 +28,60 @@ export const USER_ACCENT: Record<UserId, string> = {
 // Workouts by date — same for all users for now.
 // To give a user a different workout, extend to: Record<string, Record<UserId | 'all', Workout>>
 const workouts: Record<string, Workout> = {
+  '2026-06-10': {
+    date: '2026-06-10',
+    dayLabel: 'Miercuri 10 Iunie',
+    title: 'Partea Superioară',
+    type: 'Ziua Grea',
+    subtitle: 'Forță pură. Mișcări controlate, greutăți mari.',
+    exercises: [
+      {
+        id: 'db-press',
+        name: 'Împins cu gantere din culcat',
+        muscle: 'Piept',
+        sets: 3,
+        reps: '6–8',
+        note: 'Priză neutră, coate la 45°',
+      },
+      {
+        id: 'cable-row',
+        name: 'Ramat la helcometru din șezut',
+        muscle: 'Spate',
+        sets: 3,
+        reps: '8–10',
+        note: 'Trage din spate, nu din brațe',
+      },
+      {
+        id: 'lateral-raise',
+        name: 'Fluturări laterale cu gantere',
+        muscle: 'Umeri',
+        sets: 3,
+        reps: '10',
+        note: 'În planul scapular, până la nivelul umerilor',
+      },
+      {
+        id: 'bicep-curl',
+        name: 'Flexii cu gantere',
+        muscle: 'Biceps',
+        sets: 3,
+        reps: '8–10',
+      },
+      {
+        id: 'cable-curl-supination',
+        name: 'Flexii la helcometru cu supinație',
+        muscle: 'Antebrat',
+        sets: 4,
+        reps: '8–10',
+      },
+      {
+        id: 'tricep-pushdown',
+        name: 'Extensii la scripete',
+        muscle: 'Triceps',
+        sets: 3,
+        reps: '8–10',
+      },
+    ],
+  },
   '2026-06-12': {
     date: '2026-06-12',
     dayLabel: 'Vineri 12 Iunie',

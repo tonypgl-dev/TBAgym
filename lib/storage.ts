@@ -108,6 +108,45 @@ export function getDayExercises(userId: string, date: string): DayExercise[] {
   }))
 }
 
+// ─── Seed demo data for Tony & Bobo on 2026-06-10 ────────────────────────────
+// Runs once per browser session; idempotent via SEED_KEY flag.
+const SEED_KEY = 'gbuddy_seeded_v2'
+
+export function seedDemoData() {
+  if (typeof window === 'undefined') return
+  if (localStorage.getItem(SEED_KEY)) return
+
+  const date  = '2026-06-10'
+  const users = ['Tony', 'Bobo'] as const
+
+  const exercises = [
+    { id: 'db-press',              name: 'Împins cu gantere din culcat',       muscle: 'Piept',    sets: 3, reps: '6–8'   },
+    { id: 'cable-row',             name: 'Ramat la helcometru din șezut',       muscle: 'Spate',    sets: 3, reps: '8–10'  },
+    { id: 'lateral-raise',         name: 'Fluturări laterale cu gantere',       muscle: 'Umeri',    sets: 3, reps: '10'    },
+    { id: 'bicep-curl',            name: 'Flexii cu gantere',                   muscle: 'Biceps',   sets: 3, reps: '8–10'  },
+    { id: 'cable-curl-supination', name: 'Flexii la helcometru cu supinație',   muscle: 'Antebrat', sets: 4, reps: '8–10'  },
+    { id: 'tricep-pushdown',       name: 'Extensii la scripete',                muscle: 'Triceps',  sets: 3, reps: '8–10'  },
+  ]
+
+  const loggedExercises: LoggedExercise[] = exercises.map(ex => ({ ...ex, completed: true }))
+
+  for (const user of users) {
+    // Only seed if user hasn't already recorded their own data for this day
+    if (localStorage.getItem(LOG_KEY(user, date))) continue
+
+    saveHistory(user, date, exercises.length, exercises.length)
+    saveChecked(user, date, exercises.map(e => e.id))
+    saveWorkoutLog(user, date, {
+      date,
+      title: 'Partea Superioară – Ziua Grea',
+      exercises: loggedExercises,
+      savedAt: `${date}T20:00:00.000Z`,
+    })
+  }
+
+  localStorage.setItem(SEED_KEY, '1')
+}
+
 // ─── Generate plain-text export for LLM ──────────────────────────────────────
 const RO_DAYS = ['Duminică','Luni','Marți','Miercuri','Joi','Vineri','Sâmbătă']
 const RO_MONTHS = ['Ianuarie','Februarie','Martie','Aprilie','Mai','Iunie',

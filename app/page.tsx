@@ -1,10 +1,13 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useUser } from '@/hooks/useUser'
 import { UserSelect } from '@/components/UserSelect'
 import { WorkoutView } from '@/components/WorkoutView'
+import { seedDemoData } from '@/lib/storage'
 
 export default function Home() {
+  useEffect(() => { seedDemoData() }, [])
   const { user, loading, login, logout } = useUser()
 
   if (loading) {
