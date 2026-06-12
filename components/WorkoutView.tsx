@@ -108,7 +108,7 @@ export function WorkoutView({ user, onLogout }: Props) {
         setJustChecked(id)
         setTimeout(() => setJustChecked(null), 300)
       }
-      saveChecked(user, today, [...next])
+      saveChecked(user, today, Array.from(next))
       saveHistory(user, today, next.size, exercisesRef.current.length)
       return next
     })
@@ -127,7 +127,7 @@ export function WorkoutView({ user, onLogout }: Props) {
 
     const newChecked = new Set(checked)
     newChecked.delete(actionTarget)
-    saveChecked(user, today, [...newChecked])
+    saveChecked(user, today, Array.from(newChecked))
     setChecked(newChecked)
 
     const newList = exercises.filter(e => e.id !== actionTarget)
