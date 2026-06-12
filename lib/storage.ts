@@ -8,6 +8,7 @@ const LS_CHECKED  = (u: string, d: string) => `gbuddy_checked_${u}_${d}`
 const LS_CUSTOM   = (u: string, d: string) => `gbuddy_custom_${u}_${d}`
 const LS_DELETED  = (u: string, d: string) => `gbuddy_deleted_${u}_${d}`
 const LS_LOG      = (u: string, d: string) => `gbuddy_log_${u}_${d}`
+const LS_NOTE     = (u: string, d: string) => `gbuddy_note_${u}_${d}`
 
 function lsRead<T>(key: string, fallback: T): T {
   try { return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback }
@@ -191,6 +192,18 @@ export async function syncUserData(userId: string) {
       lsWrite(LS_LOG(userId, l.date), log)
     }
   }
+
+  // Sync day notes
+  const { data: notes } = await supabase
+    .from('day_notes')
+    .select('date, title, note')
+    .eq('user_id', userId)
+
+  if (notes) {
+    for (const n of notes) {
+      lsWrite(LS_NOTE(userId, n.date), { title: n.title, note: n.note })
+    }
+  }
 }
 
 // ─── Internal: fetch daily_state row from Supabase (or fallback to LS) ────────
@@ -227,6 +240,26 @@ export function getDayExercises(userId: string, date: string): DayExercise[] {
     reps:      ex.reps,
     completed: checked.has(ex.id),
   }))
+}
+
+// ─── Rest-day notes ───────────────────────────────────────────────────────────
+export interface DayNote { title: string; note: string }
+
+export function getDayNote(userId: string, date: string): DayNote | null {
+  return lsRead(LS_NOTE(userId, date), null)
+}
+
+export async function saveDayNote(userId: string, date: string, title: string, note: string) {
+  lsWrite(LS_NOTE(userId, date), { title, note })
+  await supabase
+    .from('day_notes')
+    .upsert({ user_id: userId, date, title, note, updated_at: new Date().toISOString() },
+             { onConflict: 'user_id,date' })
+}
+
+export async function deleteDayNote(userId: string, date: string) {
+  localStorage.removeItem(LS_NOTE(userId, date))
+  await supabase.from('day_notes').delete().eq('user_id', userId).eq('date', date)
 }
 
 // ─── Seed demo data for Tony & Bobo on 2026-06-10 ────────────────────────────
@@ -288,7 +321,13 @@ export function generateExportText(userId: string, days: number, userName: strin
     const completed = exercises.filter(e => e.completed)
 
     if (completed.length === 0 && exercises.length === 0) {
-      lines.push(`${dayLabel} — Odihnă`)
+      const note = getDayNote(userId, ds)
+      if (note && (note.title || note.note)) {
+        lines.push(`${dayLabel} — ${note.title || 'Notă'}`)
+        if (note.note) lines.push(`  ${note.note}`)
+      } else {
+        lines.push(`${dayLabel} — Odihnă`)
+      }
       lines.push('')
       continue
     }
