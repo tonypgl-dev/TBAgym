@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { getHistory, getDayExercises, generateExportText } from '@/lib/storage'
+import { getHistory, syncHistory, getDayExercises, generateExportText } from '@/lib/storage'
 import { USER_ACCENT, type UserId } from '@/data/workouts'
 
 const DAY_LABELS  = ['L', 'Ma', 'Mi', 'J', 'V', 'S', 'D']
@@ -40,7 +40,11 @@ export function CalendarView({ user, onClose }: Props) {
   const [editableText,  setEditableText]  = useState('')
   const [copied,        setCopied]        = useState(false)
 
-  const history = useMemo(() => getHistory(user), [user])
+  const [history, setHistory] = useState(() => getHistory(user))
+
+  useEffect(() => {
+    syncHistory(user).then(setHistory)
+  }, [user])
 
   // Regenerate editable text when range or mode changes
   useEffect(() => {

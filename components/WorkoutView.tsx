@@ -9,6 +9,7 @@ import {
   getDeletedIds, saveDeletedIds,
   saveHistory,
   getWorkoutLog, saveWorkoutLog,
+  syncUserData,
 } from '@/lib/storage'
 import { CalendarView } from './CalendarView'
 import { AddExerciseModal } from './AddExerciseModal'
@@ -66,17 +67,21 @@ export function WorkoutView({ user, onLogout }: Props) {
   const exercisesRef = useRef(exercises)
   exercisesRef.current = exercises
 
-  // ─── Init from localStorage ────────────────────────────────────────────────
+  // ─── Init: load from localStorage then sync Supabase in background ───────
   useEffect(() => {
-    const base    = workout?.exercises ?? []
-    const deleted = getDeletedIds(user, today)
-    const custom  = getCustomExercises(user, today)
-    const list    = [...base.filter(e => !deleted.includes(e.id)), ...custom]
-    setExercises(list)
+    function loadFromLS() {
+      const base    = workout?.exercises ?? []
+      const deleted = getDeletedIds(user, today)
+      const custom  = getCustomExercises(user, today)
+      const list    = [...base.filter(e => !deleted.includes(e.id)), ...custom]
+      setExercises(list)
+      const savedIds = getChecked(user, today)
+      setChecked(new Set(savedIds.filter(id => list.some(e => e.id === id))))
+      setSaved(!!getWorkoutLog(user, today))
+    }
 
-    const savedIds = getChecked(user, today)
-    setChecked(new Set(savedIds.filter(id => list.some(e => e.id === id))))
-    setSaved(!!getWorkoutLog(user, today))
+    loadFromLS()
+    syncUserData(user).then(loadFromLS)
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Long-press via Pointer Events (works identically on touch + mouse) ───
