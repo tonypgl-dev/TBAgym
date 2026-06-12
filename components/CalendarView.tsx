@@ -579,8 +579,15 @@ export function CalendarView({ user, onClose }: Props) {
                 </button>
               ))}
             </div>
+            <textarea
+              value={editableText}
+              onChange={e => setEditableText(e.target.value)}
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-4 font-mono text-[11px] text-zinc-400 leading-relaxed resize-none outline-none focus:border-zinc-600 transition-colors mb-4"
+              style={{ minHeight: '55vh', userSelect: 'text', WebkitUserSelect: 'text' }}
+              spellCheck={false}
+            />
             <button onClick={handleCopy}
-              className="w-full py-3 rounded-xl font-display font-black text-lg mb-4 transition-all"
+              className="w-full py-3 rounded-xl font-display font-black text-lg mb-3 transition-all"
               style={{
                 backgroundColor: copied ? `${accent}33` : accent,
                 color: copied ? accent : '#080808',
@@ -588,15 +595,8 @@ export function CalendarView({ user, onClose }: Props) {
               }}>
               {copied ? 'COPIAT ✓' : 'COPIAZĂ TEXT'}
             </button>
-            <textarea
-              value={editableText}
-              onChange={e => setEditableText(e.target.value)}
-              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-4 font-mono text-[11px] text-zinc-400 leading-relaxed resize-none outline-none focus:border-zinc-600 transition-colors"
-              style={{ minHeight: '55vh' }}
-              spellCheck={false}
-            />
-            <p className="font-mono text-[10px] text-zinc-700 text-center mt-3">
-              Editează direct, apoi copiază și dă paste unui AI.
+            <p className="font-mono text-[10px] text-zinc-700 text-center">
+              Selectează porțiuni pentru copiere parțială · Editează direct textul
             </p>
           </div>
         )}

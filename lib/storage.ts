@@ -281,7 +281,7 @@ export async function deleteDayNote(userId: string, date: string) {
 }
 
 // ─── Seed demo data for Tony & Bobo on 2026-06-10 ────────────────────────────
-const SEED_KEY = 'gbuddy_seeded_v2'
+const SEED_KEY = 'gbuddy_seeded_v3'
 
 export async function seedDemoData() {
   if (typeof window === 'undefined') return
@@ -300,15 +300,18 @@ export async function seedDemoData() {
   const loggedExercises: LoggedExercise[] = exercises.map(ex => ({ ...ex, completed: true }))
 
   for (const user of users) {
-    if (getWorkoutLog(user, date)) continue
-
-    const log: WorkoutLog = {
-      date, title: 'Partea Superioară – Ziua Grea', exercises: loggedExercises,
-      savedAt: `${date}T20:00:00.000Z`,
+    // June 10 — Ziua Grea (Partea Superioară)
+    if (!getWorkoutLog(user, date)) {
+      const log: WorkoutLog = {
+        date, title: 'Partea Superioară – Ziua Grea', exercises: loggedExercises,
+        savedAt: `${date}T20:00:00.000Z`,
+      }
+      await saveHistory(user, date, exercises.length, exercises.length)
+      await saveChecked(user, date, exercises.map(e => e.id))
+      await saveWorkoutLog(user, date, log)
     }
-    await saveHistory(user, date, exercises.length, exercises.length)
-    await saveChecked(user, date, exercises.map(e => e.id))
-    await saveWorkoutLog(user, date, log)
+    await saveDayType(user, '2026-06-10', 'hard')
+    await saveDayType(user, '2026-06-12', 'easy')
   }
 
   localStorage.setItem(SEED_KEY, '1')
