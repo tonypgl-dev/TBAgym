@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { getHistory, generateExportText } from '@/lib/storage'
+import { useState, useMemo, useEffect } from 'react'
+import { getHistory, getDayExercises, generateExportText } from '@/lib/storage'
 import { USER_ACCENT, type UserId } from '@/data/workouts'
 
 const DAY_LABELS  = ['L', 'Ma', 'Mi', 'J', 'V', 'S', 'D']
@@ -10,57 +10,51 @@ const MONTH_NAMES = [
   'Iulie', 'August', 'Septembrie', 'Octombrie', 'Noiembrie', 'Decembrie',
 ]
 
+// App start date — days before this are greyed out
+const START_DATE = '2026-06-10'
+
 interface Props {
   user: UserId
   onClose: () => void
 }
 
-function dateStr(d: Date) {
-  return d.toISOString().split('T')[0]
-}
-
-// Returns Monday of the week containing `d`
-function mondayOf(d: Date) {
-  const copy = new Date(d)
-  const day = copy.getDay()              // 0=Sun
-  copy.setDate(copy.getDate() - ((day + 6) % 7))
-  copy.setHours(0, 0, 0, 0)
-  return copy
-}
-
-function addDays(d: Date, n: number) {
-  const copy = new Date(d)
-  copy.setDate(d.getDate() + n)
-  return copy
+function localDateStr(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export function CalendarView({ user, onClose }: Props) {
   const accent  = USER_ACCENT[user]
-  const today   = dateStr(new Date())
+  const today   = localDateStr(new Date())
 
-  const [mode, setMode]  = useState<'week' | 'month' | 'export'>('week')
+  const [mode, setMode] = useState<'month' | 'export'>('month')
 
-  // Week navigation: store the Monday of the displayed week
-  const [weekMon, setWeekMon] = useState(() => mondayOf(new Date()))
-
-  // Month navigation
+  // Month navigation — default to current month
   const [viewYear,  setViewYear]  = useState(new Date().getFullYear())
   const [viewMonth, setViewMonth] = useState(new Date().getMonth())
 
+  // Popup for day detail
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+
   // Export
-  const [exportDays, setExportDays] = useState<7 | 14 | 21>(7)
-  const [copied,     setCopied]     = useState(false)
-  const exportText = useMemo(
-    () => mode === 'export' ? generateExportText(user, exportDays, user) : '',
-    [user, exportDays, mode],
-  )
+  const [exportDays,    setExportDays]    = useState<7 | 14 | 21>(7)
+  const [editableText,  setEditableText]  = useState('')
+  const [copied,        setCopied]        = useState(false)
+
+  const history = useMemo(() => getHistory(user), [user])
+
+  // Regenerate editable text when range or mode changes
+  useEffect(() => {
+    if (mode === 'export') {
+      setEditableText(generateExportText(user, exportDays, user))
+    }
+  }, [mode, exportDays, user])
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(exportText)
+      await navigator.clipboard.writeText(editableText)
     } catch {
       const el = document.createElement('textarea')
-      el.value = exportText
+      el.value = editableText
       document.body.appendChild(el)
       el.select()
       document.execCommand('copy')
@@ -70,22 +64,11 @@ export function CalendarView({ user, onClose }: Props) {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const history = useMemo(() => getHistory(user), [user])
-
-  // ─── Week helpers ──────────────────────────────────────────────────────────
-  const weekDays = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDays(weekMon, i)),
-    [weekMon],
-  )
-
-  const prevWeek = () => setWeekMon(m => addDays(m, -7))
-  const nextWeek = () => setWeekMon(m => addDays(m, 7))
-
-  // ─── Month helpers ─────────────────────────────────────────────────────────
+  // ─── Month grid ────────────────────────────────────────────────────────────
   const monthDays = useMemo(() => {
     const firstDay = new Date(viewYear, viewMonth, 1)
     const lastDay  = new Date(viewYear, viewMonth + 1, 0)
-    const pad      = (firstDay.getDay() + 6) % 7  // blanks before 1st
+    const pad      = (firstDay.getDay() + 6) % 7
     const cells: (Date | null)[] = Array(pad).fill(null)
     for (let d = 1; d <= lastDay.getDate(); d++) {
       cells.push(new Date(viewYear, viewMonth, d))
@@ -102,55 +85,121 @@ export function CalendarView({ user, onClose }: Props) {
     else setViewMonth(m => m + 1)
   }
 
+  const monthGymDays = Object.entries(history).filter(([ds, r]) =>
+    r.done > 0 &&
+    ds >= START_DATE &&
+    ds.startsWith(`${viewYear}-${String(viewMonth + 1).padStart(2, '0')}`)
+  ).length
+
   // ─── Day cell ──────────────────────────────────────────────────────────────
   const DayCell = ({ date }: { date: Date | null }) => {
     if (!date) return <div />
 
-    const ds      = dateStr(date)
-    const record  = history[ds]
-    const isToday = ds === today
-    const future  = ds > today
-    const gymDay  = !!record && record.done > 0
-    const allDone = !!record && record.done >= record.total && record.total > 0
-
-    const bgColor = gymDay
-      ? allDone ? accent : `${accent}55`
-      : 'transparent'
+    const ds           = localDateStr(date)
+    const record       = history[ds]
+    const isToday      = ds === today
+    const isFuture     = ds > today
+    const isBeforeApp  = ds < START_DATE
+    const gymDay       = !isBeforeApp && !!record && record.done > 0
+    const tappable     = gymDay
 
     return (
       <div className="flex flex-col items-center">
-        <div
-          className="w-9 h-9 rounded-full flex items-center justify-center"
+        <button
+          disabled={!tappable}
+          onClick={() => tappable && setSelectedDay(ds)}
+          className="w-9 h-9 rounded-full flex items-center justify-center transition-all duration-150"
           style={{
-            backgroundColor: bgColor,
+            backgroundColor: gymDay ? accent : 'transparent',
             border: isToday ? `2px solid ${accent}` : '2px solid transparent',
+            opacity: isBeforeApp || isFuture ? 0.25 : 1,
           }}
         >
           <span
             className="font-mono text-xs font-bold leading-none"
-            style={{ color: gymDay ? '#080808' : future ? '#2a2a2a' : '#555' }}
+            style={{ color: gymDay ? '#080808' : '#555' }}
           >
             {date.getDate()}
           </span>
-        </div>
+        </button>
       </div>
     )
   }
 
-  // ─── Stats helpers ─────────────────────────────────────────────────────────
-  const weekGymDays = weekDays.filter(d => {
-    const r = history[dateStr(d)]
-    return r && r.done > 0
-  }).length
+  // ─── Day detail popup ──────────────────────────────────────────────────────
+  const DayPopup = () => {
+    if (!selectedDay) return null
+    const exercises = getDayExercises(user, selectedDay)
+    const done      = exercises.filter(e => e.completed)
+    const d         = new Date(selectedDay + 'T12:00:00')
+    const label     = `${DAY_LABELS[(d.getDay() + 6) % 7]} ${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`
 
-  const weekPastDays = weekDays.filter(d => dateStr(d) <= today).length
-
-  const monthGymDays = Object.entries(history).filter(([ds, r]) => {
     return (
-      r.done > 0 &&
-      ds.startsWith(`${viewYear}-${String(viewMonth + 1).padStart(2, '0')}`)
+      <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}>
+        <div
+          className="w-full bg-zinc-950 border-t border-zinc-800 rounded-t-2xl px-4 pt-4 pb-10"
+          style={{ maxHeight: '75vh', overflowY: 'auto' }}
+        >
+          {/* Handle */}
+          <div className="w-10 h-1 rounded-full bg-zinc-800 mx-auto mb-4" />
+
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <div className="font-mono text-[10px] uppercase tracking-widest text-zinc-600">{label}</div>
+              <div
+                className="font-display font-black text-2xl leading-tight"
+                style={{ letterSpacing: '-0.03em', color: accent }}
+              >
+                {done.length}/{exercises.length} complete
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedDay(null)}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-zinc-600 hover:text-zinc-300 border border-zinc-800"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Exercise list */}
+          <div className="space-y-2">
+            {exercises.length === 0 && (
+              <div className="font-mono text-sm text-zinc-600 text-center py-4">Nicio dată salvată pentru această zi.</div>
+            )}
+            {exercises.map((ex, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-3 py-2.5 border-b border-zinc-900 last:border-0"
+              >
+                <span
+                  className="font-mono text-xs w-4 text-center shrink-0"
+                  style={{ color: ex.completed ? accent : '#444' }}
+                >
+                  {ex.completed ? '✓' : '○'}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="font-display font-bold text-base leading-tight truncate"
+                    style={{ color: ex.completed ? '#f0f0f0' : '#444' }}
+                  >
+                    {ex.name}
+                  </div>
+                  <div className="font-mono text-[10px] text-zinc-600">{ex.muscle}</div>
+                </div>
+                <div
+                  className="font-mono text-xs font-bold shrink-0"
+                  style={{ color: ex.completed ? accent : '#333' }}
+                >
+                  {ex.sets}×{ex.reps}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     )
-  }).length
+  }
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
@@ -170,16 +219,12 @@ export function CalendarView({ user, onClose }: Props) {
           Înapoi
         </button>
 
-        <span
-          className="font-display font-black text-xl"
-          style={{ letterSpacing: '-0.03em' }}
-        >
+        <span className="font-display font-black text-xl" style={{ letterSpacing: '-0.03em' }}>
           CALENDAR
         </span>
 
-        {/* Mode toggle */}
         <div className="flex gap-1 bg-zinc-900 rounded-lg p-1">
-          {([['week','SĂP'], ['month','LUNĂ'], ['export','EXPORT']] as const).map(([m, label]) => (
+          {([['month', 'LUNĂ'], ['export', 'EXPORT']] as const).map(([m, label]) => (
             <button
               key={m}
               onClick={() => setMode(m)}
@@ -196,72 +241,18 @@ export function CalendarView({ user, onClose }: Props) {
       </div>
 
       <div className="px-4 pt-5 pb-10">
-        {/* ── WEEK MODE ── */}
-        {mode === 'week' && (
-          <>
-            {/* Navigation */}
-            <div className="flex items-center justify-between mb-5">
-              <button onClick={prevWeek} className="w-9 h-9 flex items-center justify-center text-zinc-500 hover:text-zinc-200 transition-colors text-xl">
-                ‹
-              </button>
-              <span className="font-mono text-[11px] text-zinc-500 tracking-widest uppercase">
-                {weekDays[0].toLocaleDateString('ro-RO', { day: 'numeric', month: 'short' })}
-                {' – '}
-                {weekDays[6].toLocaleDateString('ro-RO', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </span>
-              <button onClick={nextWeek} className="w-9 h-9 flex items-center justify-center text-zinc-500 hover:text-zinc-200 transition-colors text-xl">
-                ›
-              </button>
-            </div>
-
-            {/* Day labels */}
-            <div className="grid grid-cols-7 mb-2">
-              {DAY_LABELS.map(l => (
-                <div key={l} className="flex justify-center">
-                  <span className="font-mono text-[10px] text-zinc-700">{l}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Day cells */}
-            <div className="grid grid-cols-7">
-              {weekDays.map((d, i) => <DayCell key={i} date={d} />)}
-            </div>
-
-            {/* Week stat card */}
-            <div
-              className="mt-6 p-4 rounded-2xl border"
-              style={{ borderColor: `${accent}22`, backgroundColor: `${accent}08` }}
-            >
-              <div className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest mb-2">
-                Săptămâna aceasta
-              </div>
-              <div className="font-display font-black text-5xl leading-none" style={{ color: accent }}>
-                {weekGymDays}
-                <span className="text-2xl text-zinc-700 ml-1">/{weekPastDays}</span>
-              </div>
-              <div className="font-mono text-xs text-zinc-600 mt-1">zile de sală</div>
-            </div>
-          </>
-        )}
 
         {/* ── MONTH MODE ── */}
         {mode === 'month' && (
           <>
-            {/* Navigation */}
             <div className="flex items-center justify-between mb-5">
-              <button onClick={prevMonth} className="w-9 h-9 flex items-center justify-center text-zinc-500 hover:text-zinc-200 transition-colors text-xl">
-                ‹
-              </button>
+              <button onClick={prevMonth} className="w-9 h-9 flex items-center justify-center text-zinc-500 hover:text-zinc-200 transition-colors text-xl">‹</button>
               <span className="font-mono text-[11px] text-zinc-500 tracking-widest uppercase">
                 {MONTH_NAMES[viewMonth]} {viewYear}
               </span>
-              <button onClick={nextMonth} className="w-9 h-9 flex items-center justify-center text-zinc-500 hover:text-zinc-200 transition-colors text-xl">
-                ›
-              </button>
+              <button onClick={nextMonth} className="w-9 h-9 flex items-center justify-center text-zinc-500 hover:text-zinc-200 transition-colors text-xl">›</button>
             </div>
 
-            {/* Day labels */}
             <div className="grid grid-cols-7 mb-2">
               {DAY_LABELS.map(l => (
                 <div key={l} className="flex justify-center">
@@ -270,12 +261,11 @@ export function CalendarView({ user, onClose }: Props) {
               ))}
             </div>
 
-            {/* Day cells */}
             <div className="grid grid-cols-7 gap-y-2">
               {monthDays.map((d, i) => <DayCell key={i} date={d} />)}
             </div>
 
-            {/* Month stat card */}
+            {/* Stat */}
             <div
               className="mt-6 p-4 rounded-2xl border"
               style={{ borderColor: `${accent}22`, backgroundColor: `${accent}08` }}
@@ -288,33 +278,25 @@ export function CalendarView({ user, onClose }: Props) {
               </div>
               <div className="font-mono text-xs text-zinc-600 mt-1">zile de sală</div>
             </div>
-          </>
-        )}
 
-        {/* Legend — shown only on calendar modes */}
-        {mode !== 'export' && (
-          <div className="mt-6 pt-4 border-t border-zinc-900 space-y-2.5">
-            <div className="font-mono text-[10px] text-zinc-700 uppercase tracking-widest mb-3">Legendă</div>
-            {[
-              { bg: accent, label: 'Antrenament complet' },
-              { bg: `${accent}55`, label: 'Antrenament parțial' },
-              { border: accent, label: 'Astăzi' },
-            ].map(({ bg, border, label }) => (
-              <div key={label} className="flex items-center gap-3">
-                <div
-                  className="w-6 h-6 rounded-full shrink-0"
-                  style={{ backgroundColor: bg, border: border ? `2px solid ${border}` : undefined }}
-                />
-                <span className="font-mono text-xs text-zinc-500">{label}</span>
+            {/* Legend */}
+            <div className="mt-5 pt-4 border-t border-zinc-900 flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full" style={{ backgroundColor: accent }} />
+                <span className="font-mono text-[10px] text-zinc-500">Sală</span>
               </div>
-            ))}
-          </div>
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full border-2" style={{ borderColor: accent }} />
+                <span className="font-mono text-[10px] text-zinc-500">Azi</span>
+              </div>
+              <span className="font-mono text-[10px] text-zinc-700 ml-auto">Apasă o zi colorată</span>
+            </div>
+          </>
         )}
 
         {/* ── EXPORT MODE ── */}
         {mode === 'export' && (
           <div className="mt-2">
-            {/* Range selector */}
             <div className="flex gap-2 mb-4">
               {([7, 14, 21] as const).map(d => (
                 <button
@@ -332,7 +314,6 @@ export function CalendarView({ user, onClose }: Props) {
               ))}
             </div>
 
-            {/* Copy button */}
             <button
               onClick={handleCopy}
               className="w-full py-3 rounded-xl font-display font-black text-lg mb-4 transition-all"
@@ -345,22 +326,23 @@ export function CalendarView({ user, onClose }: Props) {
               {copied ? 'COPIAT ✓' : 'COPIAZĂ TEXT'}
             </button>
 
-            {/* Text preview */}
-            <div
-              className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 overflow-auto"
-              style={{ maxHeight: '55vh' }}
-            >
-              <pre className="font-mono text-[11px] text-zinc-400 whitespace-pre-wrap leading-relaxed">
-                {exportText}
-              </pre>
-            </div>
+            <textarea
+              value={editableText}
+              onChange={e => setEditableText(e.target.value)}
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-4 font-mono text-[11px] text-zinc-400 leading-relaxed resize-none outline-none focus:border-zinc-600 transition-colors"
+              style={{ minHeight: '55vh' }}
+              spellCheck={false}
+            />
 
             <p className="font-mono text-[10px] text-zinc-700 text-center mt-3 leading-relaxed">
-              Copiază textul și dă-l paste unui AI pentru a genera<br />un program nou bazat pe antrenamentele tale.
+              Editează direct, apoi copiază și dă paste unui AI.
             </p>
           </div>
         )}
       </div>
+
+      {/* Day detail popup */}
+      <DayPopup />
     </div>
   )
 }
