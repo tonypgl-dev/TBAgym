@@ -76,25 +76,40 @@ export function WorkoutView({ user, onLogout }: Props) {
     setChecked(new Set(savedIds.filter(id => list.some(e => e.id === id))))
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Long-press ────────────────────────────────────────────────────────────
-  const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const isLongRef = useRef(false)
+  // ─── Long-press via Pointer Events (works identically on touch + mouse) ───
+  const timerRef       = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const suppressClick  = useRef(false)
+  const startPos       = useRef({ x: 0, y: 0 })
 
-  const onPressStart = (id: string) => {
-    isLongRef.current = false
-    timerRef.current  = setTimeout(() => {
-      isLongRef.current = true
+  const onPointerDown = (e: React.PointerEvent, id: string) => {
+    startPos.current = { x: e.clientX, y: e.clientY }
+    timerRef.current = setTimeout(() => {
+      suppressClick.current = true
       setActionTarget(id)
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(40)
     }, 500)
   }
 
-  const onPressEnd = (id: string) => {
+  const onPointerUp = () => {
     if (timerRef.current) clearTimeout(timerRef.current)
-    if (!isLongRef.current) toggle(id)
   }
 
-  const onPressCancel = () => {
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (
+      Math.abs(e.clientX - startPos.current.x) > 8 ||
+      Math.abs(e.clientY - startPos.current.y) > 8
+    ) {
+      if (timerRef.current) clearTimeout(timerRef.current)
+    }
+  }
+
+  const onPointerCancel = () => {
     if (timerRef.current) clearTimeout(timerRef.current)
+  }
+
+  const handleClick = (id: string) => {
+    if (suppressClick.current) { suppressClick.current = false; return }
+    toggle(id)
   }
 
   // ─── Toggle check ──────────────────────────────────────────────────────────
@@ -249,13 +264,15 @@ export function WorkoutView({ user, onLogout }: Props) {
                     borderColor: isChecked ? `${accent}33` : '#1e1e1e',
                     backgroundColor: isChecked ? `${accent}08` : '#111',
                     cursor: 'pointer',
+                    touchAction: 'manipulation',
+                    WebkitUserSelect: 'none',
                   }}
-                  onMouseDown={() => onPressStart(ex.id)}
-                  onMouseUp={() => onPressEnd(ex.id)}
-                  onMouseLeave={onPressCancel}
-                  onTouchStart={() => onPressStart(ex.id)}
-                  onTouchEnd={() => onPressEnd(ex.id)}
-                  onTouchMove={onPressCancel}
+                  onPointerDown={(e) => onPointerDown(e, ex.id)}
+                  onPointerUp={onPointerUp}
+                  onPointerMove={onPointerMove}
+                  onPointerCancel={onPointerCancel}
+                  onPointerLeave={onPointerCancel}
+                  onClick={() => handleClick(ex.id)}
                 >
                   <div
                     className="flex items-center justify-center w-[52px] shrink-0 font-display font-black text-3xl transition-all duration-300"
